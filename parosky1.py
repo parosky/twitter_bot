@@ -8,6 +8,7 @@ import os
 import sys
 import pickle
 import ConfigParser
+import json
 
 class Parosky1(parosky_bot.ParoskyBot):
     def __init__(self):
@@ -30,26 +31,24 @@ class Parosky1(parosky_bot.ParoskyBot):
 
         # extract posts and favs/RTs
         favs = []
-        p = re.compile(r'<.*?>')
-        p2 = re.compile(r">[0-9]+<")
-        p3 = re.compile(r"[0-9]+")
+        p = re.compile(r"data-model='.*?'")
         for line in favstring.splitlines():
-            if 'class=\"theTweet\"' in line:
-                line = p.sub('', line)
-                line = line.replace("\t","")
-                favs.append(dict())
-                favs[-1]['text'] = line.decode("utf8")
+            if "'fs-tweet'" in line:
+                line = p.search(line).group(0)
+                line = line.replace("data-model=", "")
+                line = line.strip("'")
+                tw = json.loads(line)
+                favs.append({})
+                favs[-1]['text'] = tw["text"]
+                favs[-1]['id'] = int(tw["tweet_id"])
                 favs[-1]['count'] = 0
-                favs[-1]['id'] = 0
-            if 'class=\"count\"' in line:
-                line = p.sub('', line)
-                if "Others" in line: continue
-                favs[-1]['count'] += int(line)
-            if 'class=\"bird\"' in line:
-                m = re.search("status/[0-9]+",line)
-                if m:
-                    favs[-1]['id'] = int(m.group(0).replace("status/",""))
-
+            if "'fs-tweet-meta fs-sunken-panel'" in line:
+                line = p.search(line).group(0)
+                line = line.replace("data-model=", "")
+                line = line.strip("'")
+                tw = json.loads(line)
+                for t in tw:
+                    favs[-1]['count'] += int(t["total"])
         # check update
         try:
             recent_id = pickle.load(open(self.filename_post))

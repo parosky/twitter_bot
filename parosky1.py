@@ -19,11 +19,11 @@ class Parosky1(parosky_bot.ParoskyBot):
         consumer_secret = config.get(screen_name, "consumer_secret")
         access_token = config.get(screen_name, "access_token")
         access_token_secret = config.get(screen_name, "access_token_secret")
-        self.filename_post = screen_name + "_post_{t}.p"
+        self.filename_post = screen_name + "_post.p"
         parosky_bot.ParoskyBot.__init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret)
 
     # post to twitter
-    # repost parosky0's post which is 2 or more favs/RTs
+    # repost parosky0's post which is 3 or more favs/RTs
     def post(self):
         # get favstar html
         url = 'http://favstar.fm/users/parosky0/recent'
@@ -58,11 +58,15 @@ class Parosky1(parosky_bot.ParoskyBot):
         # post
         for fav in favs:
             if '@' in fav['text']: continue
-            if (fav['id'] > recent_id) and (fav['count'] >= 2):
-                self.api.PostUpdate(fav['text'])
-                # print fav['text']
-                recent_id = max(recent_id, fav['id'])
-        pickle.dump(recent_id, open(self.filename_post, "w"))
+            if (fav['id'] > recent_id) and (fav['count'] >= 3):
+                try:
+                    self.api.PostUpdate(fav['text'])
+                    # print fav['text']
+                    recent_id = max(recent_id, fav['id'])
+                    pickle.dump(recent_id, open(self.filename_post, "w"))
+                    return
+                except:
+                    pass
 
 if __name__ == "__main__":
     func = sys.argv[1]

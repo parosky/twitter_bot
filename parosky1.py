@@ -39,9 +39,12 @@ class Parosky1(parosky_bot.ParoskyBot):
                 line = line.strip("'")
                 tw = json.loads(line)
                 favs.append({})
-                favs[-1]['text'] = tw["text"]
                 favs[-1]['id'] = int(tw["tweet_id"])
                 favs[-1]['count'] = 0
+            if "'fs-tweet-text'" in line:
+                line = line.strip()
+                line = re.sub("<.*?>", "", line)
+                favs[-1]['text'] = line
             if "'fs-tweet-meta fs-sunken-panel'" in line:
                 line = p.search(line).group(0)
                 line = line.replace("data-model=", "")

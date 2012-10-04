@@ -44,7 +44,7 @@ class Parosky1(parosky_bot.ParoskyBot):
             if "'fs-tweet-text'" in line:
                 line = line.strip()
                 line = re.sub("<.*?>", "", line)
-                favs[-1]['text'] = line
+                favs[-1]['text'] = line.decode("utf-8")
             if "'fs-tweet-meta fs-sunken-panel'" in line:
                 line = p.search(line).group(0)
                 line = line.replace("data-model=", "")

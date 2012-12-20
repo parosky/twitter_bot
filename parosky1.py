@@ -9,6 +9,7 @@ import sys
 import pickle
 import ConfigParser
 import json
+import xml.sax.saxutils
 
 class Parosky1(parosky_bot.ParoskyBot):
     def __init__(self):
@@ -44,6 +45,7 @@ class Parosky1(parosky_bot.ParoskyBot):
             if "'fs-tweet-text'" in line:
                 line = line.strip()
                 line = re.sub("<.*?>", "", line)
+                line = line.replace('&nbsp;', ' ')
                 favs[-1]['text'] = line.decode("utf-8")
             if "'fs-tweet-meta fs-sunken-panel'" in line:
                 line = p.search(line).group(0)

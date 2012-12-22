@@ -1,16 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-import os
-import parosky_bot
+import settings
+import psbot
 import urllib
 import re
-import random
+import os
+import sys
 import pickle
+import ConfigParser
+import json
+import xml.sax.saxutils
+import sqlite3
 import MeCab
 import datetime
-import ConfigParser
 
 def num2kanji(num):
     KNUM = [u"", u"一", u"二", u"三", u"四", u"五", 
@@ -42,53 +45,57 @@ def num2kanji(num):
     knum.reverse()
     return "".join(knum).rstrip()
 
-
-class AnnivSalad(parosky_bot.ParoskyBot):
+class AnnivSalad(psbot.BaseTwitterBot):
     def __init__(self):
         screen_name = "anniv_salad"
-        config = ConfigParser.RawConfigParser()
-        config.read('bot.conf')
-        consumer_key = config.get(screen_name, "consumer_key")
-        consumer_secret = config.get(screen_name, "consumer_secret")
-        access_token = config.get(screen_name, "access_token")
-        access_token_secret = config.get(screen_name, "access_token_secret")
-        self.filename_post = screen_name + "_post_{t}.p"
-        parosky_bot.ParoskyBot.__init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret)
-
+        consumer_key = settings.user_apikey[screen_name]["consumer_key"]
+        consumer_secret = settings.user_apikey[screen_name]["consumer_secret"]
+        access_token = settings.user_apikey[screen_name]["access_token"]
+        access_token_secret = settings.user_apikey[screen_name]["access_token_secret"]
+        
+        self.append_calllist(self.favorite_replies, 60*11)
+        self.append_calllist(self.favorite_retweets, 23)
+        self.append_calllist(self.update_database, 60*13)
+        self.append_calllist(self.follow_back, 60*7)
+        self.append_calllist(self.follow, 2)
+        self.append_calllist(self.post, 60*11)
+        
+        psbot.BaseTwitterBot.__init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret)
+    
     # post to twitter
     # repost parosky0's post which is 2 or more favs/RTs
     def post(self):
-        statuses = self.api.GetFriendsTimeline(count=100)
+        statuses = self.api.friends_timeline(count=100)
         for status in statuses:
-            text = status.GetText().encode('utf-8').replace("\n", " ")
-            user = status.GetUser().GetScreenName().encode('utf-8')
+            text = status.text.replace("\n", " ")
+            user = status.author.screen_name.encode('utf-8')
             if len(text)>50:
                 continue
             if len(text)<5:
                 continue
-            if "ttp" in text:
+            if u"ttp" in text:
                 continue
-            if "@" in text:
+            if u"@" in text:
                 continue
-            if "(" in text:
+            if u"(" in text:
                 continue
-            if "（" in text:
+            if u"（" in text:
                 continue
-            if ")" in text:
+            if u")" in text:
                 continue
-            if "）" in text:
+            if u"）" in text:
                 continue
-            if "「" in text:
+            if u"「" in text:
                 continue
-            if "｢" in text:
+            if u"｢" in text:
                 continue
-            noun = self.getLongestNoun(text)
+            noun = self.getLongestNoun(text.encode('utf-8')).decode('utf-8')
             if noun == None:
                 continue
             d = datetime.datetime.now()
-            post = "「"+text+"」と @"+user+" が言ったから"+num2kanji(d.month).encode("utf-8")+"月"+num2kanji(d.day).encode("utf-8")+"日は"+noun+"記念日"
-            # print post
-            self.api.PostUpdate(post)
+            post = u"「%s」と @%s が言ったから%s月%s日は%s記念日" % (text, user, num2kanji(d.month), num2kanji(d.day), noun)
+            #print post
+            self.api.update_status(post)
             break
         print "posted"
 
@@ -120,29 +127,13 @@ class AnnivSalad(parosky_bot.ParoskyBot):
         # print nouns[maxindex]
         return nouns[maxindex].encode("utf-8")
 
-if __name__ == "__main__":
-    open("temp.log","w").write("test")
-    os.chdir(os.path.dirname(sys.argv[0]) or '.')
-    func = sys.argv[1]
-    bot = AnnivSalad()
 
-    print func
-    if func == "favoritereplies":
-        bot.favoriteReplies()
-    elif func == "favoriteretweets":
-        bot.favoriteRetweets()
-    elif func == "makeids":
-        bot.makeIds(sys.argv[2])
-    elif func == "refollow":
-        bot.refollow()
-    elif func == "follow":
-        bot.follow()
-    elif func == "unfollow":
-        bot.unfollow()
-    elif func == "post":
-        bot.post()
-    elif func == "makeaffiurl":
-        bot.makeAffiURL()
-    elif func == "updatedb":
-        bot.updateDB()
+if __name__ == "__main__":
+    os.chdir(os.path.dirname(sys.argv[0]) or '.')
+    parosky1 = AnnivSalad()
+    if len(sys.argv) > 1:
+        uid = sys.argv[1]
+        parosky1.make_follow_list_from_followers(uid, ["parosky0"])
+    else:
+        parosky1.run()
 

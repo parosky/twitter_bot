@@ -1,0 +1,1 @@
+from psbot import BaseTwitterBot

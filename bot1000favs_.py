@@ -11,8 +11,8 @@ import pickle
 import ConfigParser
 import json
 import xml.sax.saxutils
-import sqlite3
 import random
+import sqlalchemy
 
 class Bot1000Favs(psbot.BaseTwitterBot):
     def __init__(self):
@@ -42,21 +42,14 @@ class Bot1000Favs(psbot.BaseTwitterBot):
     def post(self, target):
         print target
         db_key = "recent_id_%s" % target 
-        con = sqlite3.connect(self.filename_db)
-        cur = con.execute("SELECT * FROM sqlite_master WHERE type='table' and name='key_value'")
-        if cur.fetchone() == None:
-            con.execute("CREATE TABLE key_value(key UNIQUE, value);")
-            con.commit()
-        cur = con.execute("SELECT value FROM key_value WHERE key='%s'" % db_key)
-        row = cur.fetchone()
-        if row:
-            recent_id = row[0]
-        else:
-            recent_id = 0
-            con.execute("INSERT INTO key_value VALUES(?, ?)", (db_key, recent_id))
-            con.commit()
-        con.close()
- 
+        session = self.Session()                                                
+        try:                                                                  
+            post_recentid = session.query(psbot.KeyValue).filter(psbot.KeyValue.key==db_key).one()
+        except sqlalchemy.orm.exc.NoResultFound:                                
+            post_recentid = psbot.KeyValue(db_key, 0)                           
+            session.add(post_recentid)                                          
+
+        recent_id = int(post_recentid.value)  
         target_user = self.api.get_user(target)
         text = target_user.status.text
         text = text + " " + target
@@ -78,10 +71,9 @@ class Bot1000Favs(psbot.BaseTwitterBot):
 
 
         # record id
-        con = sqlite3.connect(self.filename_db)
-        con.execute("UPDATE key_value SET value=? WHERE key=?;", (status_id, db_key))
-        con.commit()
-        con.close()
+        post_recentid.value = str(status_id)
+        session.commit()
+        session.close()
 
         self.api.update_status(text)
 

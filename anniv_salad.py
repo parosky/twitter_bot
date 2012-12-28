@@ -11,7 +11,6 @@ import pickle
 import ConfigParser
 import json
 import xml.sax.saxutils
-import sqlite3
 import MeCab
 import datetime
 

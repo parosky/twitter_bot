@@ -2,9 +2,47 @@
 # -*- coding: utf-8 -*-
 
 import tweepy
-import sqlite3
 import time
 import os
+import datetime
+import sqlalchemy
+import sqlalchemy.orm
+import sqlalchemy.ext.declarative
+
+Base = sqlalchemy.ext.declarative.declarative_base()
+
+class KeyValue(Base):
+    __tablename__ = 'keyvalue'
+    key = sqlalchemy.Column(sqlalchemy.String, primary_key=True)
+    value = sqlalchemy.Column(sqlalchemy.String)
+
+    def __init__(self, key, value):
+        self.key = key
+        self.value = value
+
+class CronTime(Base):
+    __tablename__ = 'crontime'
+    function = sqlalchemy.Column(sqlalchemy.String, primary_key=True)
+    called = sqlalchemy.Column(sqlalchemy.DateTime)
+
+    def __init__(self, function, called):
+        self.function = function
+        self.called = called
+
+class User(Base):
+    # [follow_to] 0: not following, 1: following, 2: removed, 4: cannot follow back
+    # [follow_from] 0: not follower, 1: follower
+    __tablename__ = 'user'
+    user_id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
+    follow_to = sqlalchemy.Column(sqlalchemy.Integer)
+    follow_from = sqlalchemy.Column(sqlalchemy.Integer)
+    date = sqlalchemy.Column(sqlalchemy.DateTime)
+
+    def __init__(self, user_id, follow_to, follow_from, date):
+        self.user_id = user_id
+        self.follow_to = follow_to
+        self.follow_from = follow_from
+        self.date = date
 
 class BaseTwitterBot():
     api = None
@@ -17,6 +55,13 @@ class BaseTwitterBot():
         self.screen_name = screen_name
         self.filename_db = screen_name + ".db"
 
+        self.engine = sqlalchemy.create_engine('sqlite:///%s' % self.filename_db)
+        self.Session = sqlalchemy.orm.sessionmaker(bind=self.engine) 
+        
+        User.metadata.create_all(self.engine)
+        CronTime.metadata.create_all(self.engine)
+        KeyValue.metadata.create_all(self.engine)
+        
         auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
         auth.set_access_token(access_token, access_token_secret)
         self.api = tweepy.API(auth)
@@ -45,10 +90,6 @@ class BaseTwitterBot():
                 break
         return friends
 
-    def get_unixtime(self):
-        """ get unix epoch time """
-        return int(time.time())
-
     def follow(self):
         """ follow an account listed in database """
         me = self.api.get_user(id=self.screen_name)
@@ -60,65 +101,65 @@ class BaseTwitterBot():
             self.unfollow(num_remove)
  
         # follow
-        date = self.get_unixtime()
-        con = sqlite3.connect(self.filename_db)
-        update_data = []
-        for row in con.execute("SELECT user_id FROM user WHERE follow_to=3 order by date"):
-            target_id = row[0]
+        date = datetime.datetime.now()
+        session = self.Session()
+        for user in session.query(User).filter(User.follow_to==3).order_by(User.date):
+            target_id = user.user_id
             try:
                 self.api.create_friendship(id=target_id)
-                update_data.append((1, date, target_id))
+                user.follow_to = 1
+                user.date = date
                 print "follow:", target_id
                 break
             except:
-                update_data.append((4, date, target_id))
+                user.follow_to = 4
+                user.date = date
                 print "follow error:", target_id
-        con.executemany("UPDATE user SET follow_to=?,date=? WHERE user_id=?", update_data)
-        con.commit()
-        con.close()
+        session.commit()
+        session.close()
 
     def follow_back(self):
         """ follow back """
-        date = self.get_unixtime()
-        con = sqlite3.connect(self.filename_db)
-        update_data = []
-        for row in con.execute("SELECT user_id FROM user WHERE follow_from=1 and follow_to=0"):
-            target_id = row[0]
+        date = datetime.datetime.now()
+        session = self.Session()
+        for user in session.query(User).filter(sqlalchemy.and_(User.follow_from==1, User.follow_to==0)):
+            target_id = user.user_id
             try:
-                self.api.create_friendship(target_id)
-                update_data.append((1, date, target_id))
+                self.api.create_friendship(id=target_id)
+                user.follow_to = 1
+                user.date = date
                 print "follow:", target_id
             except Exception as e:
-                update_data.append((4, date, target_id))
+                user.follow_to = 4
+                user.date = date
                 print "follow error:", target_id
-        con.executemany("UPDATE user SET follow_to=?,date=? WHERE user_id=?", update_data)
-        con.commit()
-        con.close()
+        session.commit()
+        session.close()
 
     def unfollow(self, limit=-1):
         """ unfollow friends who don't follow back """
 
-        date = self.get_unixtime()
-        con = sqlite3.connect(self.filename_db)
-        count = 0
-        for row in con.execute("SELECT user_id FROM user WHERE follow_from=0 and follow_to=1 order by date"):
-            target_id = row[0]
+        date = datetime.datetime.now()
+        session = self.Session()
+        for user in session.query(User).filter(sqlalchemy.and_(User.follow_from==0, User.follow_to==1)).order_by(User.date):
+            target_id = user.user_id
             try:
                 self.api.destroy_friendship(target_id)
-                con.execute("UPDATE user SET follow_to=2,date=%d WHERE user_id=%d" % (date,target_id))
-                count += 1
+                user.follow_to = 2
+                user.date = date
+                limit = limit - 1
                 print "unfollowed:", target_id
             except Exception as e:
                 print "unfollow error:", target_id
-            con.commit()
-            if (limit != -1) and (count>=limit):
+            if limit <= 0:
                 break
-        con.close()
+        session.commit()
+        session.close()
 
     def make_follow_list_from_followers(self, target, excluding_users = []):
         """ make user list to follow from someone's followers """
        
-        date = self.get_unixtime()
+        date = datetime.datetime.now()
      
         excluding_list = set()
         for user in excluding_users:
@@ -129,18 +170,18 @@ class BaseTwitterBot():
         target = self.api.get_user(target)
         target_followers = set(self.get_follower_ids(target.id))
 
-        # target candidate
         target_ids = target_followers - excluding_list
-        insert_data = []
+        session = self.Session()
+        count = 0
         for target_id in target_ids:
-            con = sqlite3.connect(self.filename_db)
-            cur = con.execute("SELECT user_id FROM user WHERE user_id=%d;" % target_id)
-            if cur.fetchone() == None:
-                insert_data.append((target_id, 3, 0, date))
-        con.executemany("INSERT INTO user VALUES(?,?,?,?);", insert_data)
-        con.commit()
-        con.close()
-        print "%d users added" % len(insert_data)               
+            user = session.query(User).filter(User.user_id==target_id)
+            if user.count() == 0:
+                user = User(target_id, 3, 0, date)
+                session.add(user)
+                count += 1
+        session.commit()
+        session.close()
+        print "%d users added" % count
         
     def favorite_replies(self):
         """ favorite all replies """
@@ -167,41 +208,26 @@ class BaseTwitterBot():
 
     def update_database(self):
         """ update database of following relations """
-        # [follow_to] 0: not following, 1: following, 2: removed, 4: cannot follow back
-        # [follow_from] 0: not follower, 1: follower
 
-        # open db
-        con = sqlite3.connect(self.filename_db)
-
-        # create table if not exists
-        cur = con.execute("SELECT * FROM sqlite_master WHERE type='table' and name='user'")
-        if cur.fetchone() == None:
-            con.execute("CREATE TABLE user(user_id INTEGER UNIQUE, follow_to INTEGER, follow_from INTEGER, date INTEGER);")
-            con.execute("CREATE UNIQUE INDEX user_index ON user(user_id);")
-            con.commit()
-        
         # get all followers and followings 
         my_followers = set(self.get_follower_ids())
         my_followings = set(self.get_friend_ids())
 
         # register to database
-        date = self.get_unixtime()
-        insert_data = []
-        update_data = []
+        session = self.Session()
+        date = datetime.datetime.now()
         for user_id in set(my_followers) | set(my_followings):
             follow_to = 1 if user_id in my_followings else 0
             follow_from = 1 if user_id in my_followers else 0
-
-            cur = con.execute("SELECT user_id FROM user WHERE user_id=%d;" % user_id)
-            if cur.fetchone() == None:
-                insert_data.append((user_id, follow_to, follow_from, date))
-            else:
-                update_data.append((follow_to, follow_from, user_id))
-
-        con.executemany("INSERT INTO user VALUES(?,?,?,?);", insert_data)
-        con.executemany("UPDATE user SET follow_to=?, follow_from=? WHERE user_id=?;", update_data)
-        con.commit()
-        con.close()
+            try:
+                user = session.query(User).filter(User.user_id==user_id).one()
+                user.follow_to = follow_to
+                user.follow_from = follow_from
+            except sqlalchemy.orm.exc.NoResultFound:
+                user = User(user_id, follow_to, follow_from, date)
+                session.add(user)
+        session.commit()
+        session.close()
 
     def append_calllist(self, function, interval_min):
         """ append function for run() """
@@ -209,32 +235,24 @@ class BaseTwitterBot():
 
     def run(self):
         """ cron job """
-        if not os.path.exists(self.filename_db):
-            self.update_database()
 
-        # create table if not exists
-        con = sqlite3.connect(self.filename_db)
-        cur = con.execute("SELECT * FROM sqlite_master WHERE type='table' and name='cron'")
-        if cur.fetchone() == None:
-            con.execute("CREATE TABLE cron(function UNIQUE, called INTEGER)")
-            con.commit()
-        con.close()
-
+        session = self.Session()
         for function, interval in self.call_list:
-            date = self.get_unixtime()
-            print date, function.__name__
+            date = datetime.datetime.now()
+            function_name = function.__name__
+           
+            try:
+                crontime = session.query(CronTime).filter(CronTime.function==function_name).one()
+            except sqlalchemy.orm.exc.NoResultFound:
+                crontime = CronTime(function_name, datetime.datetime.fromtimestamp(0))
+                session.add(crontime)
+
+            secondsdelta =  (date - crontime.called).total_seconds()
+            print secondsdelta, function_name
+            if secondsdelta < interval*60:
+                continue
             
-            con = sqlite3.connect(self.filename_db)
-            cur = con.execute("SELECT called FROM cron WHERE function='%s';" % function.__name__)
-            row = cur.fetchone()
-            if row == None:
-                con.execute("INSERT INTO cron VALUES(?,?)", (function.__name__, date))
-            else:
-                called = row[0]
-                if date - called < interval*60:
-                    continue
-                con.execute("UPDATE cron SET called=? WHERE function=?", (date, function.__name__))
-            con.commit()
-            con.close()
-            print "call:", function.__name__
+            crontime.called = date
+            session.commit()
             function()
+        session.close()

@@ -8,10 +8,9 @@ import re
 import os
 import sys
 import pickle
-import ConfigParser
 import json
 import xml.sax.saxutils
-import sqlite3
+import sqlalchemy
 
 class Parosky1(psbot.BaseTwitterBot):
     def __init__(self):
@@ -33,20 +32,14 @@ class Parosky1(psbot.BaseTwitterBot):
     # post to twitter
     # repost parosky0's post which is 3 or more favs/RTs
     def post(self):
-        con = sqlite3.connect(self.filename_db)
-        cur = con.execute("SELECT * FROM sqlite_master WHERE type='table' and name='key_value'")
-        if cur.fetchone() == None:
-            con.execute("CREATE TABLE key_value(key UNIQUE, value);")
-            con.commit()
-        cur = con.execute("SELECT value FROM key_value WHERE key='post'")
-        row = cur.fetchone()
-        if row:
-            recent_id = row[0]
-        else:
-            recent_id = 0
-            con.execute("INSERT INTO key_value VALUES(?, ?)", ('post', recent_id))
-            con.commit()
-        con.close()
+        session = self.Session()
+        try:
+            post_recentid = session.query(psbot.KeyValue).filter(psbot.KeyValue.key=='post').one()
+        except sqlalchemy.orm.exc.NoResultFound:
+            post_recentid = psbot.KeyValue('post', 0)
+            session.add(post_recentid)
+
+        recent_id = int(post_recentid.value)
         print recent_id
         
         # get favstar html
@@ -77,18 +70,15 @@ class Parosky1(psbot.BaseTwitterBot):
         for fav in favs:
             if (fav['id'] > recent_id) and (fav['count'] >= 3):
                 text = self.api.get_status(fav['id']).text
-                
-                if '@' in text: continue
+                if '@' in text:
+                    continue
                 try:
                     self.api.update_status(text)
-                except:
+                except tweepy.TweepError:
                     return
-                
-                recent_id = max(recent_id, fav['id'])
-                con = sqlite3.connect(self.filename_db)
-                con.execute("UPDATE key_value SET value=? WHERE key=?;", (recent_id, 'post'))
-                con.commit()
-                con.close()
+                post_recentid.value = str(max(recent_id, fav['id']))
+                session.commit()
+                session.close()
                 return
 
 if __name__ == "__main__":

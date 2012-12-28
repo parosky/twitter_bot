@@ -247,7 +247,8 @@ class BaseTwitterBot():
                 crontime = CronTime(function_name, datetime.datetime.fromtimestamp(0))
                 session.add(crontime)
 
-            secondsdelta =  (date - crontime.called).total_seconds()
+            secondsdelta = calendar.timegm(date.timetuple()) - calendar.timegm(crontime.called.timetuple())
+            # secondsdelta =  (date - crontime.called).total_seconds()
             print secondsdelta, function_name
             if secondsdelta < interval*60:
                 continue

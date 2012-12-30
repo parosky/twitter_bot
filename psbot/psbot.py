@@ -240,11 +240,11 @@ class BaseTwitterBot():
         """ cron job """
 
         script_name = sys.argv[0]
-        p = subprocess.Popen('ps aux | grep python | grep %s | wc' % script_name, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        p = subprocess.Popen('ps aux | grep -v grep | grep python | grep %s | wc' % script_name, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         lines = p.stdout.read()
         num_active_process = int(lines.strip().split(' ')[0])
-        print script_name, num_active_process
-        if num_active_process != 2:
+        # print script_name, num_active_process
+        if num_active_process != 1:
             return
         
         session = self.Session()

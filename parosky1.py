@@ -11,6 +11,7 @@ import pickle
 import json
 import xml.sax.saxutils
 import sqlalchemy
+import tweepy
 
 class Parosky1(psbot.BaseTwitterBot):
     def __init__(self):

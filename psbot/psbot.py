@@ -9,6 +9,8 @@ import datetime
 import sqlalchemy
 import sqlalchemy.orm
 import sqlalchemy.ext.declarative
+import subprocess
+import sys
 
 Base = sqlalchemy.ext.declarative.declarative_base()
 
@@ -237,6 +239,14 @@ class BaseTwitterBot():
     def run(self):
         """ cron job """
 
+        script_name = sys.argv[0]
+        p = subprocess.Popen('ps aux | grep python | grep %s | wc' % script_name, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        lines = p.stdout.read()
+        num_active_process = int(lines.strip().split(' ')[0])
+        print script_name, num_active_process
+        if num_active_process != 2:
+            return
+        
         session = self.Session()
         for function, interval in self.call_list:
             date = datetime.datetime.now()

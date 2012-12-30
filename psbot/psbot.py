@@ -36,9 +36,9 @@ class User(Base):
     # [follow_to] 0: not following, 1: following, 2: removed, 4: cannot follow back
     # [follow_from] 0: not follower, 1: follower
     __tablename__ = 'user'
-    user_id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
-    follow_to = sqlalchemy.Column(sqlalchemy.Integer)
-    follow_from = sqlalchemy.Column(sqlalchemy.Integer)
+    user_id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, index=True)
+    follow_to = sqlalchemy.Column(sqlalchemy.Integer, index=True)
+    follow_from = sqlalchemy.Column(sqlalchemy.Integer, index=True)
     date = sqlalchemy.Column(sqlalchemy.DateTime)
 
     def __init__(self, user_id, follow_to, follow_from, date):

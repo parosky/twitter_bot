@@ -23,10 +23,10 @@ class Parosky3(psbot.BaseTwitterBot):
         access_token = settings.user_apikey[screen_name]["access_token"]
         access_token_secret = settings.user_apikey[screen_name]["access_token_secret"]
         
-        #self.append_calllist(self.favorite_replies, 60*11)
-        #self.append_calllist(self.favorite_retweets, 23)
-        #self.append_calllist(self.update_database, 60*13)
-        #self.append_calllist(self.follow_back, 60*7)
+        self.append_calllist(self.favorite_replies, 60*11)
+        self.append_calllist(self.favorite_retweets, 23)
+        self.append_calllist(self.update_database, 60*13)
+        self.append_calllist(self.follow_back, 60*7)
         #self.append_calllist(self.follow, 2)
         self.append_calllist(self.post, 6)
         
@@ -46,8 +46,8 @@ class Parosky3(psbot.BaseTwitterBot):
             if rand <= t[2]:
                 tweet = t[1]
                 break
-        print tweet
         self.api.update_status(tweet)
+        print tweet
 
 if __name__ == "__main__":
     os.chdir(os.path.dirname(sys.argv[0]) or '.')

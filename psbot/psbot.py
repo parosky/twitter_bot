@@ -41,11 +41,11 @@ class User(Base):
     follow_from = sqlalchemy.Column(sqlalchemy.Integer, index=True)
     date = sqlalchemy.Column(sqlalchemy.DateTime)
 
-    def __init__(self, user_id, follow_to, follow_from, date):
+    def __init__(self, user_id, follow_to, follow_from):
         self.user_id = user_id
         self.follow_to = follow_to
         self.follow_from = follow_from
-        self.date = date
+        self.date = datetime.datetime.now()
 
 class BaseTwitterBot():
     api = None
@@ -69,32 +69,8 @@ class BaseTwitterBot():
         auth.set_access_token(access_token, access_token_secret)
         self.api = tweepy.API(auth)
     
-    def get_follower_ids(self, user_id=None):
-        """ get all followers' IDs """
-        followers = []
-        cursor = -1
-        while True: 
-            ret = self.api.followers_ids(id = user_id, cursor = cursor)
-            followers += ret[0]
-            cursor = ret[1][1]
-            if cursor == 0:
-                break
-        return followers
- 
-    def get_friend_ids(self, user_id=None):
-        """ get all friends' IDs """
-        friends = []
-        cursor = -1
-        while True: 
-            ret = self.api.friends_ids(id = user_id, cursor = cursor)
-            friends += ret[0]
-            cursor = ret[1][1]
-            if cursor == 0:
-                break
-        return friends
-
     def follow(self):
-        """ follow an account listed in database """
+        """ follow an account from public_timeline """
         me = self.api.get_user(id=self.screen_name)
 
         # unfollow
@@ -104,20 +80,24 @@ class BaseTwitterBot():
             self.unfollow(num_remove)
  
         # follow
-        date = datetime.datetime.now()
+        target_id = -1
+        while target_id == -1:
+            tweets = self.api.search(lang='ja', q='-http -@ -#', count=100)
+            for tweet in tweets:
+                if ('@' or 'http' or '#') not in tweet.text:
+                        target_id = tweet.from_user_id
+                        break
+
         session = self.Session()
-        for user in session.query(User).filter(User.follow_to==3).order_by(User.date):
-            target_id = user.user_id
-            try:
-                self.api.create_friendship(id=target_id)
-                user.follow_to = 1
-                user.date = date
-                print "follow:", target_id
-                break
-            except:
-                user.follow_to = 4
-                user.date = date
-                print "follow error:", target_id
+        user = User(target_id, 0, 0)
+        try:
+            self.api.create_friendship(id=target_id)
+            user.follow_to = 1
+            print "follow:", target_id
+        except:
+            user.follow_to = 4
+            print "follow error:", target_id
+        session.add(user)
         session.commit()
         session.close()
 
@@ -159,36 +139,9 @@ class BaseTwitterBot():
         session.commit()
         session.close()
 
-    def make_follow_list_from_followers(self, target, excluding_users = []):
-        """ make user list to follow from someone's followers """
-       
-        date = datetime.datetime.now()
-     
-        excluding_list = set()
-        for user in excluding_users:
-            u = self.api.get_user(id=user)
-            excluding_list = excluding_list | set(self.get_follower_ids(user_id=user))
-            excluding_list = excluding_list | set(self.get_friend_ids(user_id=user))
-
-        target = self.api.get_user(target)
-        target_followers = set(self.get_follower_ids(target.id))
-
-        target_ids = target_followers - excluding_list
-        session = self.Session()
-        count = 0
-        for target_id in target_ids:
-            user = session.query(User).filter(User.user_id==target_id)
-            if user.count() == 0:
-                user = User(target_id, 3, 0, date)
-                session.add(user)
-                count += 1
-        session.commit()
-        session.close()
-        print "%d users added" % count
-        
     def favorite_replies(self):
         """ favorite all replies """
-        statuses = self.api.mentions()
+        statuses = self.api.mentions_timeline()
         for status in statuses:
             try:
                 self.api.create_favorite(id=status.id)
@@ -196,40 +149,81 @@ class BaseTwitterBot():
                 return
             print "fav:", str(status.id)
 
-    def favorite_retweets(self):
-        """ favorite follower's retweets """
-        statuses = self.api.retweeted_to_me()
-        for status in statuses:
-            if status.user.lang != 'ja':
-                continue
-            try:
-                self.api.create_favorite(id=status.id)
-            except:
-                return
-            print "fav:", str(status.id)
-            break
+    def get_value(self, key, default=None):
+        session = self.Session()
+        q = session.query(KeyValue).filter(KeyValue.key==key)
+        if q.count() == 0:
+            return default
+        else:
+            return q.one().value
+ 
+    def set_value(self, key, value):
+        session = self.Session()
+        q = session.query(KeyValue).filter(KeyValue.key==key)
+        if q.count() == 0:
+            kv = KeyValue(key, value)
+            session.add(kv)
+        else:
+            kv = q.one()
+            kv.value = value
+        session.commit()
+        session.close()
+
+    def get_ids(self, ftype, cursor=-1):
+        if ftype == 'friends':
+            funcname1 = 'friends'
+            funcname2 = '/friends/ids'
+            func = self.api.friends_ids
+        else:
+            funcname1 = 'followers'
+            funcname2 = '/followers/ids'
+            func = self.api.followers_ids
+        ids = []
+        while self.api.rate_limit_status()['resources'][funcname1][funcname2]['remaining'] != 0: 
+            ret = func(cursor = cursor)
+            cursor = ret[1][1]
+            ids += ret[0]
+            if cursor == 0:
+                break
+        return ids, cursor
 
     def update_database(self):
         """ update database of following relations """
-
-        # get all followers and followings 
-        my_followers = set(self.get_follower_ids())
-        my_followings = set(self.get_friend_ids())
-
-        # register to database
+        
         session = self.Session()
-        date = datetime.datetime.now()
-        for user_id in set(my_followers) | set(my_followings):
-            follow_to = 1 if user_id in my_followings else 0
-            follow_from = 1 if user_id in my_followers else 0
-            try:
-                user = session.query(User).filter(User.user_id==user_id).one()
-                user.follow_to = follow_to
-                user.follow_from = follow_from
-            except sqlalchemy.orm.exc.NoResultFound:
-                user = User(user_id, follow_to, follow_from, date)
+        
+        # [follow_to] 0: not following, 1: following, 2: removed, 4: cannot follow back
+        cursor = long(self.get_value('friends_ids_cursor', -1))
+        if cursor == 0:
+            cursor = -1
+        ids, cursor = self.get_ids('friends', cursor)
+        self.set_value('friends_ids_cursor', str(cursor))
+        for user_id in ids:
+            q = session.query(User).filter(User.user_id==user_id)
+            if q.count() == 0:
+                user = User(user_id, 1, 0)
                 session.add(user)
+            else:
+                user = q.one()
+                user.follow_to = 1
         session.commit()
+        
+        # [follow_from] 0: not follower, 1: follower
+        cursor = long(self.get_value('followers_ids_cursor', -1))
+        if cursor == 0:
+            cursor = -1
+        ids, cursor = self.get_ids('followers', cursor)
+        self.set_value('followers_ids_cursor', str(cursor))
+        for user_id in ids:
+            q = session.query(User).filter(User.user_id==user_id)
+            if q.count() == 0:
+                user = User(user_id, 0, 1)
+                session.add(user)
+            else:
+                user = q.one()
+                user.follow_from = 1
+        session.commit()
+    
         session.close()
 
     def append_calllist(self, function, interval_min):

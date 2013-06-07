@@ -22,10 +22,9 @@ class Parosky1(psbot.BaseTwitterBot):
         access_token_secret = settings.user_apikey[screen_name]["access_token_secret"]
         
         self.append_calllist(self.favorite_replies, 60*11)
-        self.append_calllist(self.favorite_retweets, 23)
         self.append_calllist(self.update_database, 60*13)
         self.append_calllist(self.follow_back, 60*7)
-        self.append_calllist(self.follow, 2)
+        self.append_calllist(self.follow, 5)
         self.append_calllist(self.post, 2)
         
         psbot.BaseTwitterBot.__init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret)
@@ -85,9 +84,5 @@ class Parosky1(psbot.BaseTwitterBot):
 if __name__ == "__main__":
     os.chdir(os.path.dirname(sys.argv[0]) or '.')
     parosky1 = Parosky1()
-    if len(sys.argv) > 1:
-        uid = sys.argv[1]
-        parosky1.make_follow_list_from_followers(uid, ["parosky0"])
-    else:
-        parosky1.run()
+    parosky1.run()
 

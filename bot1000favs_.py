@@ -23,7 +23,6 @@ class Bot1000Favs(psbot.BaseTwitterBot):
         access_token_secret = settings.user_apikey[screen_name]["access_token_secret"]
         
         self.append_calllist(self.favorite_replies, 60*11)
-        self.append_calllist(self.favorite_retweets, 23)
         self.append_calllist(self.update_database, 60*13)
         self.append_calllist(self.follow_back, 60*7)
         self.append_calllist(self.follow, 2)
@@ -79,21 +78,9 @@ class Bot1000Favs(psbot.BaseTwitterBot):
 
         print "posted"
     
-    def afipost(self):
-        tweets = open("1000favs__twlist.txt").readlines()
-        text = random.choice(tweets).strip().decode("utf-8")
-        self.api.update_status(text)
-
 
 if __name__ == "__main__":
     os.chdir(os.path.dirname(sys.argv[0]) or '.')
     bot = Bot1000Favs()
-    if len(sys.argv) > 1:
-        uid = sys.argv[1]
-        if uid == "afipost":
-            bot.afipost()
-        else:
-            bot.make_follow_list_from_followers(uid, ["parosky0"])
-    else:
-        bot.run()
+    bot.run()
 

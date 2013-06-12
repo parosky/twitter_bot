@@ -85,7 +85,7 @@ class BaseTwitterBot():
             tweets = self.api.search(lang='ja', q='-http -@ -#', count=100)
             for tweet in tweets:
                 if ('@' or 'http' or '#') not in tweet.text:
-                        target_id = tweet.from_user_id
+                        target_id = tweet.author.id
                         break
 
         session = self.Session()

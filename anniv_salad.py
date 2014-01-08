@@ -1,18 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import settings
-import psbot
-import urllib
-import re
 import os
 import sys
-import pickle
-import ConfigParser
-import json
-import xml.sax.saxutils
-import MeCab
 import datetime
+
+import settings
+import basebot
+import MeCab
+
 
 def num2kanji(num):
     KNUM = [u"", u"一", u"二", u"三", u"四", u"五", 
@@ -44,7 +40,7 @@ def num2kanji(num):
     knum.reverse()
     return "".join(knum).rstrip()
 
-class AnnivSalad(psbot.BaseTwitterBot):
+class AnnivSalad(basebot.BaseBot):
     def __init__(self):
         screen_name = "anniv_salad"
         consumer_key = settings.user_apikey[screen_name]["consumer_key"]
@@ -58,7 +54,7 @@ class AnnivSalad(psbot.BaseTwitterBot):
         self.append_calllist(self.follow, 2)
         self.append_calllist(self.post, 60*11)
         
-        psbot.BaseTwitterBot.__init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret)
+        basebot.BaseBot.__init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret)
     
     # post to twitter
     # repost parosky0's post which is 2 or more favs/RTs

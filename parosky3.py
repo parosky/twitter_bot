@@ -1,21 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import settings
-import psbot
-import urllib
-import re
 import os
 import sys
 import pickle
-import json
-import xml.sax.saxutils
-import sqlalchemy
-import tweepy
 import random
 import datetime
 
-class Parosky3(psbot.BaseTwitterBot):
+import settings
+import basebot
+
+
+class Parosky3(basebot.BaseBot):
     def __init__(self):
         screen_name = "parosky3"
         consumer_key = settings.user_apikey[screen_name]["consumer_key"]
@@ -29,7 +25,7 @@ class Parosky3(psbot.BaseTwitterBot):
         #self.append_calllist(self.follow, 2)
         self.append_calllist(self.post, 6)
         
-        psbot.BaseTwitterBot.__init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret)
+        basebot.BaseBot.__init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret)
     
     # post to twitter
     def post(self):

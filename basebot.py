@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import tweepy
-import time
-import os
 import calendar
 import datetime
 import sqlalchemy
@@ -11,6 +9,7 @@ import sqlalchemy.orm
 import sqlalchemy.ext.declarative
 import subprocess
 import sys
+import os
 
 Base = sqlalchemy.ext.declarative.declarative_base()
 
@@ -47,28 +46,29 @@ class User(Base):
         self.follow_from = follow_from
         self.date = datetime.datetime.now()
 
-class BaseTwitterBot():
-    api = None
-    screen_name = None
-    filename_db = None
-    call_list = []
+class BaseBot():
     FOLLOW_MARGIN = 100
 
     def __init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret):
         self.screen_name = screen_name
-        self.filename_db = screen_name + ".db"
+
+        self.directory = os.path.abspath(os.path.dirname(__file__))
+        self.filename_lock = '%s/lock/%s.lock' % (self.directory, screen_name)
+        self.filename_db = '%s/database/%s.db' % (self.directory, self.screen_name)
 
         self.engine = sqlalchemy.create_engine('sqlite:///%s' % self.filename_db)
-        self.Session = sqlalchemy.orm.sessionmaker(bind=self.engine) 
-        
+        self.Session = sqlalchemy.orm.sessionmaker(bind=self.engine)
+
         User.metadata.create_all(self.engine)
         CronTime.metadata.create_all(self.engine)
         KeyValue.metadata.create_all(self.engine)
-        
+
         auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
         auth.set_access_token(access_token, access_token_secret)
         self.api = tweepy.API(auth)
-    
+
+        self.call_list = []
+
     def follow(self):
         """ follow an account from public_timeline """
         me = self.api.get_user(id=self.screen_name)
@@ -78,7 +78,7 @@ class BaseTwitterBot():
         num_remove = self.FOLLOW_MARGIN - follow_limit
         if (me.friends_count > 2000) and (num_remove > 0):
             self.unfollow(num_remove)
- 
+
         # follow
         target_id = -1
         while target_id == -1:
@@ -112,7 +112,7 @@ class BaseTwitterBot():
                 user.follow_to = 1
                 user.date = date
                 print "follow:", target_id
-            except Exception as e:
+            except Exception:
                 user.follow_to = 4
                 user.date = date
                 print "follow error:", target_id
@@ -130,9 +130,9 @@ class BaseTwitterBot():
                 self.api.destroy_friendship(target_id)
                 user.follow_to = 2
                 user.date = date
-                limit = limit - 1
+                limit -= 1
                 print "unfollowed:", target_id
-            except Exception as e:
+            except Exception:
                 print "unfollow error:", target_id
             if limit <= 0:
                 break
@@ -143,11 +143,11 @@ class BaseTwitterBot():
         """ favorite all replies """
         statuses = self.api.mentions_timeline()
         for status in statuses:
-            try:
+            if status.favorited:
+                continue
+            else:
                 self.api.create_favorite(id=status.id)
-            except:
-                return
-            print "fav:", str(status.id)
+                print "fav:", str(status.id)
 
     def get_value(self, key, default=None):
         session = self.Session()
@@ -156,7 +156,7 @@ class BaseTwitterBot():
             return default
         else:
             return q.one().value
- 
+
     def set_value(self, key, value):
         session = self.Session()
         q = session.query(KeyValue).filter(KeyValue.key==key)
@@ -179,7 +179,7 @@ class BaseTwitterBot():
             funcname2 = '/followers/ids'
             func = self.api.followers_ids
         ids = []
-        while self.api.rate_limit_status()['resources'][funcname1][funcname2]['remaining'] != 0: 
+        while self.api.rate_limit_status()['resources'][funcname1][funcname2]['remaining'] != 0:
             ret = func(cursor = cursor)
             cursor = ret[1][1]
             ids += ret[0]
@@ -189,9 +189,9 @@ class BaseTwitterBot():
 
     def update_database(self):
         """ update database of following relations """
-        
+
         session = self.Session()
-        
+
         # [follow_to] 0: not following, 1: following, 2: removed, 4: cannot follow back
         cursor = long(self.get_value('friends_ids_cursor', -1))
         if cursor == 0:
@@ -207,7 +207,7 @@ class BaseTwitterBot():
                 user = q.one()
                 user.follow_to = 1
         session.commit()
-        
+
         # [follow_from] 0: not follower, 1: follower
         cursor = long(self.get_value('followers_ids_cursor', -1))
         if cursor == 0:
@@ -223,42 +223,48 @@ class BaseTwitterBot():
                 user = q.one()
                 user.follow_from = 1
         session.commit()
-    
+
         session.close()
 
     def append_calllist(self, function, interval_min):
         """ append function for run() """
         self.call_list.append((function, interval_min))
 
+        function_name = function.__name__
+        session = self.Session()
+        try:
+            crontime = session.query(CronTime).filter(CronTime.function==function_name).one()
+        except sqlalchemy.orm.exc.NoResultFound:
+            crontime = CronTime(function_name, datetime.datetime.fromtimestamp(0))
+            session.add(crontime)
+            session.commit()
+        session.close()
+
     def run(self):
         """ cron job """
 
-        script_name = sys.argv[0]
-        p = subprocess.Popen('ps aux | grep -v grep | grep python | grep %s | wc' % script_name, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        lines = p.stdout.read()
-        num_active_process = int(lines.strip().split(' ')[0])
-        # print script_name, num_active_process
-        if num_active_process != 1:
+        # check lockfile
+        if os.path.exists(self.filename_lock):
             return
-        
-        session = self.Session()
+        else:
+            open(self.filename_lock, 'w')
+
+
         for function, interval in self.call_list:
             date = datetime.datetime.now()
             function_name = function.__name__
-           
-            try:
-                crontime = session.query(CronTime).filter(CronTime.function==function_name).one()
-            except sqlalchemy.orm.exc.NoResultFound:
-                crontime = CronTime(function_name, datetime.datetime.fromtimestamp(0))
-                session.add(crontime)
 
+            session = self.Session()
+            crontime = session.query(CronTime).filter(CronTime.function==function_name).one()
             secondsdelta = calendar.timegm(date.timetuple()) - calendar.timegm(crontime.called.timetuple())
-            # secondsdelta =  (date - crontime.called).total_seconds()
+
             print secondsdelta, function_name
-            if secondsdelta < interval*60:
-                continue
-            
-            crontime.called = date
-            session.commit()
-            function()
-        session.close()
+            if secondsdelta > interval*60:
+                crontime.called = date
+                session.commit()
+                function()
+
+            session.close()
+
+        # unlock
+        os.remove(self.filename_lock)

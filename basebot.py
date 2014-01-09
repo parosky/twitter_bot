@@ -101,11 +101,11 @@ class BaseBot():
         session.commit()
         session.close()
 
-    def follow_back(self):
+    def follow_back(self, limit=1000):
         """ follow back """
         date = datetime.datetime.now()
         session = self.Session()
-        for user in session.query(User).filter(sqlalchemy.and_(User.follow_from==1, User.follow_to==0)):
+        for user in session.query(User).filter(sqlalchemy.and_(User.follow_from==1, User.follow_to==0))[:limit]:
             target_id = user.user_id
             try:
                 self.api.create_friendship(id=target_id)

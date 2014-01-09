@@ -42,8 +42,7 @@ class User(Base):
     #   0: not follower
     #   1: follower
     __tablename__ = 'user'
-    user_id = sqlalchemy.Column(sqlalchemy.Integer,
-                                primary_key=True, index=True)
+    user_id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, index=True)
     follow_to = sqlalchemy.Column(sqlalchemy.Integer, index=True)
     follow_from = sqlalchemy.Column(sqlalchemy.Integer, index=True)
     date = sqlalchemy.Column(sqlalchemy.DateTime)
@@ -116,9 +115,7 @@ class BaseBot():
         date = datetime.datetime.now()
         session = self.Session()
         for user in session.query(User).filter(
-                sqlalchemy.and_(User.follow_from == 1,
-                                User.follow_to == 0)
-                )[:limit]:
+                sqlalchemy.and_(User.follow_from == 1, User.follow_to == 0))[:limit]:
             target_id = user.user_id
             try:
                 self.api.create_friendship(id=target_id)
@@ -138,8 +135,7 @@ class BaseBot():
         date = datetime.datetime.now()
         session = self.Session()
         for user in session.query(User).filter(
-                sqlalchemy.and_(User.follow_from == 0,
-                                User.follow_to == 1)
+                sqlalchemy.and_(User.follow_from == 0, User.follow_to == 1)
                 ).order_by(User.date):
             target_id = user.user_id
             try:
@@ -249,8 +245,7 @@ class BaseBot():
         function_name = function.__name__
         session = self.Session()
         try:
-            crontime = session.query(CronTime).filter(
-                CronTime.function == function_name).one()
+            crontime = session.query(CronTime).filter(CronTime.function == function_name).one()
         except sqlalchemy.orm.exc.NoResultFound:
             crontime = CronTime(function_name, datetime.datetime.fromtimestamp(0))
             session.add(crontime)
@@ -272,9 +267,9 @@ class BaseBot():
                 function_name = function.__name__
 
                 session = self.Session()
-                crontime = session.query(CronTime).filter(
-                    CronTime.function == function_name).one()
-                secondsdelta = calendar.timegm(date.timetuple()) - calendar.timegm(crontime.called.timetuple())
+                crontime = session.query(CronTime).filter(CronTime.function == function_name).one()
+                secondsdelta = (calendar.timegm(date.timetuple()) -
+                                calendar.timegm(crontime.called.timetuple()))
 
                 print secondsdelta, function_name
                 if secondsdelta > interval*60:
@@ -286,6 +281,5 @@ class BaseBot():
 
             # unlock
             os.remove(self.filename_lock)
-        except e as Exception:
+        except Exception as e:
             open(self.filename_lock, 'w').write(e.message)
-

@@ -16,8 +16,7 @@ class Parosky1(basebot.BaseBot):
         access_token = settings.user_apikey[screen_name]["access_token"]
         access_token_secret = settings.user_apikey[screen_name]["access_token_secret"]
 
-        basebot.BaseBot.__init__(self,
-                                 screen_name,
+        basebot.BaseBot.__init__(self, screen_name,
                                  consumer_key,
                                  consumer_secret,
                                  access_token,
@@ -47,8 +46,7 @@ class Parosky1(basebot.BaseBot):
 
         # post
         for tweet in tweets:
-            if ((tweet.id > recent_id) and
-                    (tweet.favorite_count+tweet.retweet_count >= 3)):
+            if (tweet.id > recent_id) and (tweet.favorite_count+tweet.retweet_count >= 3):
                 text = tweet.text
                 if '@' in text:
                     continue

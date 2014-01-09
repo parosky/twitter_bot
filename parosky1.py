@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import sys
-
 import sqlalchemy
 import tweepy
 
@@ -19,7 +16,12 @@ class Parosky1(basebot.BaseBot):
         access_token = settings.user_apikey[screen_name]["access_token"]
         access_token_secret = settings.user_apikey[screen_name]["access_token_secret"]
 
-        basebot.BaseBot.__init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret)
+        basebot.BaseBot.__init__(self,
+                                 screen_name,
+                                 consumer_key,
+                                 consumer_secret,
+                                 access_token,
+                                 access_token_secret)
 
         self.append_calllist(self.post, 2)
         self.append_calllist(self.follow, 5)
@@ -32,7 +34,8 @@ class Parosky1(basebot.BaseBot):
     def post(self):
         session = self.Session()
         try:
-            post_recentid = session.query(basebot.KeyValue).filter(basebot.KeyValue.key=='post').one()
+            post_recentid = session.query(basebot.KeyValue).filter(
+                basebot.KeyValue.key == 'post').one()
         except sqlalchemy.orm.exc.NoResultFound:
             post_recentid = basebot.KeyValue('post', 0)
             session.add(post_recentid)
@@ -61,4 +64,3 @@ class Parosky1(basebot.BaseBot):
 if __name__ == "__main__":
     parosky1 = Parosky1()
     parosky1.run()
-

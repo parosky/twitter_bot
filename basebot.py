@@ -7,11 +7,10 @@ import datetime
 import sqlalchemy
 import sqlalchemy.orm
 import sqlalchemy.ext.declarative
-import subprocess
-import sys
 import os
 
 Base = sqlalchemy.ext.declarative.declarative_base()
+
 
 class KeyValue(Base):
     __tablename__ = 'keyvalue'
@@ -22,6 +21,7 @@ class KeyValue(Base):
         self.key = key
         self.value = value
 
+
 class CronTime(Base):
     __tablename__ = 'crontime'
     function = sqlalchemy.Column(sqlalchemy.String, primary_key=True)
@@ -31,11 +31,19 @@ class CronTime(Base):
         self.function = function
         self.called = called
 
+
 class User(Base):
-    # [follow_to] 0: not following, 1: following, 2: removed, 4: cannot follow back
-    # [follow_from] 0: not follower, 1: follower
+    # [follow_to]
+    #   0: not following
+    #   1: following
+    #   2: removed
+    #   4: cannot follow back
+    # [follow_from]
+    #   0: not follower
+    #   1: follower
     __tablename__ = 'user'
-    user_id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, index=True)
+    user_id = sqlalchemy.Column(sqlalchemy.Integer,
+                                primary_key=True, index=True)
     follow_to = sqlalchemy.Column(sqlalchemy.Integer, index=True)
     follow_from = sqlalchemy.Column(sqlalchemy.Integer, index=True)
     date = sqlalchemy.Column(sqlalchemy.DateTime)
@@ -46,10 +54,12 @@ class User(Base):
         self.follow_from = follow_from
         self.date = datetime.datetime.now()
 
+
 class BaseBot():
     FOLLOW_MARGIN = 100
 
-    def __init__(self, screen_name, consumer_key, consumer_secret, access_token, access_token_secret):
+    def __init__(self, screen_name, consumer_key, consumer_secret,
+                 access_token, access_token_secret):
         self.screen_name = screen_name
 
         self.directory = os.path.abspath(os.path.dirname(__file__))
@@ -105,7 +115,10 @@ class BaseBot():
         """ follow back """
         date = datetime.datetime.now()
         session = self.Session()
-        for user in session.query(User).filter(sqlalchemy.and_(User.follow_from==1, User.follow_to==0))[:limit]:
+        for user in session.query(User).filter(
+                sqlalchemy.and_(User.follow_from == 1,
+                                User.follow_to == 0)
+                )[:limit]:
             target_id = user.user_id
             try:
                 self.api.create_friendship(id=target_id)
@@ -124,7 +137,10 @@ class BaseBot():
 
         date = datetime.datetime.now()
         session = self.Session()
-        for user in session.query(User).filter(sqlalchemy.and_(User.follow_from==0, User.follow_to==1)).order_by(User.date):
+        for user in session.query(User).filter(
+                sqlalchemy.and_(User.follow_from == 0,
+                                User.follow_to == 1)
+                ).order_by(User.date):
             target_id = user.user_id
             try:
                 self.api.destroy_friendship(target_id)
@@ -151,7 +167,7 @@ class BaseBot():
 
     def get_value(self, key, default=None):
         session = self.Session()
-        q = session.query(KeyValue).filter(KeyValue.key==key)
+        q = session.query(KeyValue).filter(KeyValue.key == key)
         if q.count() == 0:
             return default
         else:
@@ -159,7 +175,7 @@ class BaseBot():
 
     def set_value(self, key, value):
         session = self.Session()
-        q = session.query(KeyValue).filter(KeyValue.key==key)
+        q = session.query(KeyValue).filter(KeyValue.key == key)
         if q.count() == 0:
             kv = KeyValue(key, value)
             session.add(kv)
@@ -180,7 +196,7 @@ class BaseBot():
             func = self.api.followers_ids
         ids = []
         while self.api.rate_limit_status()['resources'][funcname1][funcname2]['remaining'] != 0:
-            ret = func(cursor = cursor)
+            ret = func(cursor=cursor)
             cursor = ret[1][1]
             ids += ret[0]
             if cursor == 0:
@@ -199,7 +215,7 @@ class BaseBot():
         ids, cursor = self.get_ids('friends', cursor)
         self.set_value('friends_ids_cursor', str(cursor))
         for user_id in ids:
-            q = session.query(User).filter(User.user_id==user_id)
+            q = session.query(User).filter(User.user_id == user_id)
             if q.count() == 0:
                 user = User(user_id, 1, 0)
                 session.add(user)
@@ -215,7 +231,7 @@ class BaseBot():
         ids, cursor = self.get_ids('followers', cursor)
         self.set_value('followers_ids_cursor', str(cursor))
         for user_id in ids:
-            q = session.query(User).filter(User.user_id==user_id)
+            q = session.query(User).filter(User.user_id == user_id)
             if q.count() == 0:
                 user = User(user_id, 0, 1)
                 session.add(user)
@@ -233,7 +249,8 @@ class BaseBot():
         function_name = function.__name__
         session = self.Session()
         try:
-            crontime = session.query(CronTime).filter(CronTime.function==function_name).one()
+            crontime = session.query(CronTime).filter(
+                CronTime.function == function_name).one()
         except sqlalchemy.orm.exc.NoResultFound:
             crontime = CronTime(function_name, datetime.datetime.fromtimestamp(0))
             session.add(crontime)
@@ -249,22 +266,26 @@ class BaseBot():
         else:
             open(self.filename_lock, 'w')
 
+        try:
+            for function, interval in self.call_list:
+                date = datetime.datetime.now()
+                function_name = function.__name__
 
-        for function, interval in self.call_list:
-            date = datetime.datetime.now()
-            function_name = function.__name__
+                session = self.Session()
+                crontime = session.query(CronTime).filter(
+                    CronTime.function == function_name).one()
+                secondsdelta = calendar.timegm(date.timetuple()) - calendar.timegm(crontime.called.timetuple())
 
-            session = self.Session()
-            crontime = session.query(CronTime).filter(CronTime.function==function_name).one()
-            secondsdelta = calendar.timegm(date.timetuple()) - calendar.timegm(crontime.called.timetuple())
+                print secondsdelta, function_name
+                if secondsdelta > interval*60:
+                    crontime.called = date
+                    session.commit()
+                    function()
 
-            print secondsdelta, function_name
-            if secondsdelta > interval*60:
-                crontime.called = date
-                session.commit()
-                function()
+                session.close()
 
-            session.close()
+            # unlock
+            os.remove(self.filename_lock)
+        except e as Exception:
+            open(self.filename_lock, 'w').write(e.message)
 
-        # unlock
-        os.remove(self.filename_lock)

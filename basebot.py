@@ -89,13 +89,19 @@ class BaseBot():
             self.unfollow(num_remove)
 
         # follow
+        session = self.Session()
         target_id = -1
         while target_id == -1:
             tweets = self.api.search(lang='ja', q='-http -@ -#', count=100)
             for tweet in tweets:
                 if ('@' or 'http' or '#') not in tweet.text:
-                        target_id = tweet.author.id
+                    target_id = tweet.author.id
+                    q = session.query(User).filter(User.user_id == target_id)
+                    if q.count() == 0:
                         break
+                    else:
+                        continue
+        session.close()
 
         session = self.Session()
         user = User(target_id, 0, 0)

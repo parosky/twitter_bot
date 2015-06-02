@@ -23,8 +23,8 @@ class Parosky1(basebot.BaseBot):
                                  access_token_secret)
 
         self.append_calllist(self.post, 2)
-        self.append_calllist(self.follow, 5)
-        self.append_calllist(self.follow_back, 60*7)
+        #self.append_calllist(self.follow, 5)
+        #self.append_calllist(self.follow_back, 60*7)
         self.append_calllist(self.favorite_replies, 60*11)
         self.append_calllist(self.update_database, 60*13)
 
@@ -51,9 +51,10 @@ class Parosky1(basebot.BaseBot):
                 if '@' in text:
                     continue
                 try:
-                    self.api.update_status(text)
-                except tweepy.TweepError:
-                    return
+                    self.api.update_status(status=text)
+                except Exception as e:
+                    print e
+
                 post_recentid.value = str(max(recent_id, tweet.id))
                 session.commit()
                 session.close()
